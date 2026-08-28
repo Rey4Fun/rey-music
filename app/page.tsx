@@ -7,23 +7,34 @@ interface Song {
   name: string;
 }
 
+interface Playlist {
+  id: string;
+  name: string;
+  songIds: string[];
+}
+
 export default function Home() {
   const [songs, setSongs] = useState<Song[]>([]);
   const [currentSong, setCurrentSong] = useState<Song | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  // 1. Search & Filter Tab
+  // 1. Search & Navigation Tabs ('all' | 'liked' | 'library')
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState<'all' | 'liked'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'liked' | 'library'>('all');
 
   // 2. Liked Songs (Favorites)
   const [likedSongs, setLikedSongs] = useState<string[]>([]);
 
-  // 3. Fullscreen Player State
+  // 3. Playlists & Library State
+  const [playlists, setPlaylists] = useState<Playlist[]>([]);
+  const [selectedPlaylistId, setSelectedPlaylistId] = useState<string | null>(null);
+  const [selectedSongForModal, setSelectedSongForModal] = useState<string | null>(null);
+
+  // 4. Fullscreen Player State
   const [isPlayerExpanded, setIsPlayerExpanded] = useState(false);
 
-  // 4. Batch Download State
+  // 5. Batch Download State
   const [isDownloadingAll, setIsDownloadingAll] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
 
@@ -50,7 +61,7 @@ export default function Home() {
     return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
   };
 
-  // Initial Load (Songs, Liked Songs, Offline Cache, & Service Worker)
+  // Initial Load (Songs, Liked Songs, Playlists, Offline Cache, & Service Worker)
   useEffect(() => {
     // Registrasi Native Service Worker untuk Offline App Shell
     if ('serviceWorker' in navigator) {
@@ -94,6 +105,24 @@ export default function Home() {
       }
     }
 
+    // Load Playlists dari LocalStorage
+    const savedPlaylists = localStorage.getItem('rey_music_playlists');
+    if (savedPlaylists) {
+      try {
+        setPlaylists(JSON.parse(savedPlaylists));
+      } catch (e) {
+        console.error(e);
+      }
+    } else {
+      // Playlist default jika pertama kali buka
+      const defaultPlaylists: Playlist[] = [
+        { id: '1', name: 'Lagu Enak 🎧', songIds: [] },
+        { id: '2', name: 'Santai / Chill ☕', songIds: [] },
+      ];
+      setPlaylists(defaultPlaylists);
+      localStorage.setItem('rey_music_playlists', JSON.stringify(defaultPlaylists));
+    }
+
     // Cek Offline Cache
     if ('caches' in window) {
       caches.open('rey-music-audio-v1').then(async (cache) => {
@@ -106,14 +135,30 @@ export default function Home() {
     }
   }, []);
 
-  // Filter Songs berdasarkan Search & Tab
+  // Simpan Playlist ke LocalStorage setiap ada perubahan
+  useEffect(() => {
+    if (playlists.length > 0) {
+      localStorage.setItem('rey_music_playlists', JSON.stringify(playlists));
+    }
+  }, [playlists]);
+
+  // Filter Songs berdasarkan Search, Tab, & Selected Playlist
   const filteredSongs = useMemo(() => {
     return songs.filter((song) => {
       const matchesSearch = song.name.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesTab = activeTab === 'all' || likedSongs.includes(song.id);
-      return matchesSearch && matchesTab;
+
+      if (activeTab === 'liked') {
+        return matchesSearch && likedSongs.includes(song.id);
+      }
+
+      if (activeTab === 'library' && selectedPlaylistId) {
+        const targetPlaylist = playlists.find((p) => p.id === selectedPlaylistId);
+        return matchesSearch && targetPlaylist?.songIds.includes(song.id);
+      }
+
+      return matchesSearch;
     });
-  }, [songs, searchQuery, activeTab, likedSongs]);
+  }, [songs, searchQuery, activeTab, likedSongs, selectedPlaylistId, playlists]);
 
   // Handle Toggle Like / Favorite
   const toggleLikeSong = (e: React.MouseEvent, songId: string) => {
@@ -126,7 +171,45 @@ export default function Home() {
     });
   };
 
-  // Setup Audio Source (Safe from null)
+  // Playlist Handler Functions
+  const handleCreatePlaylist = () => {
+    const name = prompt('Masukkan nama playlist baru:');
+    if (name && name.trim() !== '') {
+      const newPl: Playlist = {
+        id: Date.now().toString(),
+        name: name.trim(),
+        songIds: [],
+      };
+      setPlaylists((prev) => [...prev, newPl]);
+    }
+  };
+
+  const handleDeletePlaylist = (e: React.MouseEvent, playlistId: string) => {
+    e.stopPropagation();
+    if (confirm('Yakin ingin menghapus playlist ini?')) {
+      setPlaylists((prev) => prev.filter((p) => p.id !== playlistId));
+      if (selectedPlaylistId === playlistId) setSelectedPlaylistId(null);
+    }
+  };
+
+  const toggleSongInPlaylist = (playlistId: string, songId: string) => {
+    setPlaylists((prev) =>
+      prev.map((pl) => {
+        if (pl.id === playlistId) {
+          const exists = pl.songIds.includes(songId);
+          return {
+            ...pl,
+            songIds: exists
+              ? pl.songIds.filter((id) => id !== songId)
+              : [...pl.songIds, songId],
+          };
+        }
+        return pl;
+      })
+    );
+  };
+
+  // Setup Audio Source
   useEffect(() => {
     if (!currentSong || !audioRef.current) return;
     const audio = audioRef.current;
@@ -303,6 +386,8 @@ export default function Home() {
     else setRepeatMode('off');
   };
 
+  const activePlaylist = playlists.find((p) => p.id === selectedPlaylistId);
+
   return (
     <div className="flex flex-col md:flex-row min-h-screen bg-slate-950 text-white antialiased selection:bg-emerald-500 selection:text-black">
       <audio
@@ -345,7 +430,7 @@ export default function Home() {
         {/* Navigation Tabs */}
         <div className="flex md:flex-col gap-1.5">
           <button
-            onClick={() => setActiveTab('all')}
+            onClick={() => { setActiveTab('all'); setSelectedPlaylistId(null); }}
             className={`flex-1 md:flex-none text-left px-3.5 py-2 rounded-xl text-xs font-semibold transition-all flex items-center justify-between ${
               activeTab === 'all'
                 ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
@@ -357,7 +442,7 @@ export default function Home() {
           </button>
 
           <button
-            onClick={() => setActiveTab('liked')}
+            onClick={() => { setActiveTab('liked'); setSelectedPlaylistId(null); }}
             className={`flex-1 md:flex-none text-left px-3.5 py-2 rounded-xl text-xs font-semibold transition-all flex items-center justify-between ${
               activeTab === 'liked'
                 ? 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
@@ -366,6 +451,18 @@ export default function Home() {
           >
             <span>❤️ Lagu Disukai</span>
             <span className="text-[10px] opacity-70">({likedSongs.length})</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('library')}
+            className={`flex-1 md:flex-none text-left px-3.5 py-2 rounded-xl text-xs font-semibold transition-all flex items-center justify-between ${
+              activeTab === 'library'
+                ? 'bg-purple-500/15 text-purple-400 border border-purple-500/30'
+                : 'text-slate-400 hover:text-white hover:bg-slate-900'
+            }`}
+          >
+            <span>📚 Koleksi Kamu</span>
+            <span className="text-[10px] opacity-70">({playlists.length})</span>
           </button>
         </div>
 
@@ -385,106 +482,240 @@ export default function Home() {
         )}
       </aside>
 
-      {/* Main Content (Daftar Lagu) */}
+      {/* Main Content */}
       <main className="flex-1 p-4 md:p-8 pb-36 min-w-0 max-w-5xl mx-auto w-full">
-        {/* Header Content & Action Bar */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+        {/* VIEW 1: KOLEKSI / DAFTAR PLAYLIST (Jika di tab Library & belum pilih playlist) */}
+        {activeTab === 'library' && !selectedPlaylistId ? (
           <div>
-            <h2 className="text-xl md:text-2xl font-extrabold tracking-tight">
-              {activeTab === 'liked' ? 'Lagu Disukai ❤️' : 'Koleksi Lagu Saya'}
-            </h2>
-            <p className="text-xs text-slate-400 mt-0.5">
-              {filteredSongs.length} lagu ditampilkan
-            </p>
-          </div>
+            <div className="flex items-center justify-between gap-3 mb-6">
+              <div>
+                <h2 className="text-xl md:text-2xl font-extrabold tracking-tight">Koleksi Kamu 📚</h2>
+                <p className="text-xs text-slate-400 mt-0.5">Kelola playlist & mood lagu kamu</p>
+              </div>
 
-          {/* Tombol Unduh Semua */}
-          <button
-            onClick={handleDownloadAll}
-            disabled={isDownloadingAll || songs.length === 0}
-            className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold bg-emerald-500 text-slate-950 hover:bg-emerald-400 transition-all shadow-lg shadow-emerald-500/15 disabled:opacity-60 shrink-0"
-          >
-            {isDownloadingAll ? (
-              <span>⏳ Mengunduh ({downloadProgress}/{songs.length})...</span>
-            ) : (
-              <span>⬇️ Unduh Semua Offline</span>
-            )}
-          </button>
-        </div>
+              <button
+                onClick={handleCreatePlaylist}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold bg-purple-600 text-white hover:bg-purple-500 transition-all shadow-lg shadow-purple-600/20"
+              >
+                <span>➕ Buat Playlist</span>
+              </button>
+            </div>
 
-        {/* Daftar Lagu */}
-        {loading ? (
-          <p className="text-slate-400 text-sm">Memuat koleksi lagu...</p>
-        ) : filteredSongs.length === 0 ? (
-          <div className="text-center py-12 bg-slate-900/30 rounded-2xl border border-slate-800/50">
-            <p className="text-slate-400 text-sm">Tidak ada lagu yang ditemukan.</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {playlists.map((pl) => (
+                <div
+                  key={pl.id}
+                  onClick={() => setSelectedPlaylistId(pl.id)}
+                  className="group flex items-center justify-between p-4 rounded-2xl bg-slate-900/60 hover:bg-slate-900 border border-slate-800/60 cursor-pointer transition-all"
+                >
+                  <div className="flex items-center gap-3.5 min-w-0">
+                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center font-black text-lg text-white shadow-md">
+                      {pl.name[0]?.toUpperCase() || '🎵'}
+                    </div>
+                    <div className="min-w-0">
+                      <h3 className="text-sm font-bold text-white truncate group-hover:text-purple-400 transition">
+                        {pl.name}
+                      </h3>
+                      <p className="text-xs text-slate-400 mt-0.5">{pl.songIds.length} lagu</p>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={(e) => handleDeletePlaylist(e, pl.id)}
+                    className="p-1.5 text-slate-600 hover:text-rose-400 text-xs transition"
+                    title="Hapus Playlist"
+                  >
+                    🗑️
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
         ) : (
-          <div className="space-y-1.5">
-            {filteredSongs.map((song, index) => {
-              const isSelected = currentSong?.id === song.id;
-              const cleanTitle = formatSongTitle(song.name);
-              const isDownloaded = offlineSongs.includes(song.id);
-              const isDownloading = downloadingId === song.id;
-              const isLiked = likedSongs.includes(song.id);
+          /* VIEW 2: DAFTAR LAGU (Tampilan Utama / Liked / Detail Playlist) */
+          <div>
+            {/* Header Content & Action Bar */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+              <div>
+                {activeTab === 'library' && selectedPlaylistId && (
+                  <button
+                    onClick={() => setSelectedPlaylistId(null)}
+                    className="text-xs text-purple-400 font-medium mb-1 hover:underline flex items-center gap-1"
+                  >
+                    ← Kembali ke Koleksi
+                  </button>
+                )}
+                <h2 className="text-xl md:text-2xl font-extrabold tracking-tight">
+                  {activeTab === 'liked'
+                    ? 'Lagu Disukai ❤️'
+                    : activeTab === 'library' && activePlaylist
+                    ? activePlaylist.name
+                    : 'Koleksi Lagu Saya'}
+                </h2>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  {filteredSongs.length} lagu ditampilkan
+                </p>
+              </div>
 
-              return (
-                <div
-                  key={song.id}
-                  onClick={() => {
-                    setCurrentSong(song);
-                    setIsPlaying(true);
-                  }}
-                  className={`group flex items-center justify-between p-3 md:p-3.5 rounded-2xl cursor-pointer transition-all gap-3 ${
-                    isSelected
-                      ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-300'
-                      : 'bg-slate-900/40 hover:bg-slate-900 text-slate-300 border border-slate-800/40'
-                  }`}
-                >
-                  <div className="flex items-center gap-3 min-w-0 flex-1">
-                    <span className="text-xs font-semibold text-slate-500 w-5 shrink-0 text-right">
-                      {isSelected && isPlaying ? '▶' : index + 1}
-                    </span>
-                    <span className={`font-medium text-xs md:text-sm truncate ${isSelected ? 'text-emerald-400 font-semibold' : ''}`}>
-                      {cleanTitle}
-                    </span>
-                  </div>
+              {/* Tombol Unduh Semua */}
+              <button
+                onClick={handleDownloadAll}
+                disabled={isDownloadingAll || songs.length === 0}
+                className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold bg-emerald-500 text-slate-950 hover:bg-emerald-400 transition-all shadow-lg shadow-emerald-500/15 disabled:opacity-60 shrink-0"
+              >
+                {isDownloadingAll ? (
+                  <span>⏳ Mengunduh ({downloadProgress}/{songs.length})...</span>
+                ) : (
+                  <span>⬇️ Unduh Semua Offline</span>
+                )}
+              </button>
+            </div>
 
-                  <div className="flex items-center gap-2 shrink-0">
-                    {/* Tombol Liked / Favorite */}
-                    <button
-                      onClick={(e) => toggleLikeSong(e, song.id)}
-                      className={`p-1.5 rounded-lg text-sm transition ${
-                        isLiked ? 'text-rose-500' : 'text-slate-600 hover:text-slate-400'
+            {/* Daftar Lagu */}
+            {loading ? (
+              <p className="text-slate-400 text-sm">Memuat koleksi lagu...</p>
+            ) : filteredSongs.length === 0 ? (
+              <div className="text-center py-12 bg-slate-900/30 rounded-2xl border border-slate-800/50">
+                <p className="text-slate-400 text-sm">Tidak ada lagu yang ditemukan.</p>
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                {filteredSongs.map((song, index) => {
+                  const isSelected = currentSong?.id === song.id;
+                  const cleanTitle = formatSongTitle(song.name);
+                  const isDownloaded = offlineSongs.includes(song.id);
+                  const isDownloading = downloadingId === song.id;
+                  const isLiked = likedSongs.includes(song.id);
+
+                  return (
+                    <div
+                      key={song.id}
+                      onClick={() => {
+                        setCurrentSong(song);
+                        setIsPlaying(true);
+                      }}
+                      className={`group flex items-center justify-between p-3 md:p-3.5 rounded-2xl cursor-pointer transition-all gap-3 ${
+                        isSelected
+                          ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-300'
+                          : 'bg-slate-900/40 hover:bg-slate-900 text-slate-300 border border-slate-800/40'
                       }`}
-                      title={isLiked ? "Hapus dari Favorit" : "Sukai Lagu"}
                     >
-                      {isLiked ? '❤️' : '🤍'}
-                    </button>
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <span className="text-xs font-semibold text-slate-500 w-5 shrink-0 text-right">
+                          {isSelected && isPlaying ? '▶' : index + 1}
+                        </span>
+                        <span className={`font-medium text-xs md:text-sm truncate ${isSelected ? 'text-emerald-400 font-semibold' : ''}`}>
+                          {cleanTitle}
+                        </span>
+                      </div>
 
-                    {/* Tombol Simpan Offline */}
-                    <button
-                      onClick={(e) => handleDownloadOffline(e, song)}
-                      disabled={isDownloaded || isDownloading}
-                      className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition ${
-                        isDownloaded
-                          ? 'text-emerald-400 bg-emerald-500/10 cursor-default'
-                          : isDownloading
-                          ? 'text-amber-400 bg-amber-500/10 animate-pulse'
-                          : 'text-slate-400 hover:text-white hover:bg-slate-800'
-                      }`}
-                    >
-                      {isDownloaded ? '✓ Offline' : isDownloading ? 'Unduh...' : '⬇ Simpan'}
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
+                      <div className="flex items-center gap-2 shrink-0">
+                        {/* Tombol Simpan ke Playlist */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedSongForModal(song.id);
+                          }}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-purple-400 hover:bg-slate-800 transition text-xs font-bold"
+                          title="Tambah ke Playlist"
+                        >
+                          ➕
+                        </button>
+
+                        {/* Tombol Liked / Favorite */}
+                        <button
+                          onClick={(e) => toggleLikeSong(e, song.id)}
+                          className={`p-1.5 rounded-lg text-sm transition ${
+                            isLiked ? 'text-rose-500' : 'text-slate-600 hover:text-slate-400'
+                          }`}
+                          title={isLiked ? "Hapus dari Favorit" : "Sukai Lagu"}
+                        >
+                          {isLiked ? '❤️' : '🤍'}
+                        </button>
+
+                        {/* Tombol Simpan Offline */}
+                        <button
+                          onClick={(e) => handleDownloadOffline(e, song)}
+                          disabled={isDownloaded || isDownloading}
+                          className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition ${
+                            isDownloaded
+                              ? 'text-emerald-400 bg-emerald-500/10 cursor-default'
+                              : isDownloading
+                              ? 'text-amber-400 bg-amber-500/10 animate-pulse'
+                              : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                          }`}
+                        >
+                          {isDownloaded ? '✓ Offline' : isDownloading ? 'Unduh...' : '⬇ Simpan'}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
       </main>
 
-      {/* Mini-Player Footer (Baris Bawah) */}
+      {/* POP-UP MODAL: SIMPAN KE PLAYLIST */}
+      {selectedSongForModal && (
+        <div 
+          onClick={() => setSelectedSongForModal(null)}
+          className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4"
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="bg-slate-900 border border-slate-800 w-full max-w-sm rounded-2xl p-5 space-y-4 shadow-2xl animate-in fade-in slide-in-from-bottom-4 duration-200"
+          >
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 className="font-bold text-sm text-white">Simpan ke Playlist</h3>
+              <button 
+                onClick={() => setSelectedSongForModal(null)}
+                className="text-slate-400 hover:text-white text-xs p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="max-h-60 overflow-y-auto space-y-2">
+              {playlists.length === 0 ? (
+                <p className="text-xs text-slate-500 text-center py-4">Belum ada playlist. Buat playlist baru dulu.</p>
+              ) : (
+                playlists.map((pl) => {
+                  const isAdded = pl.songIds.includes(selectedSongForModal);
+                  return (
+                    <button
+                      key={pl.id}
+                      onClick={() => toggleSongInPlaylist(pl.id, selectedSongForModal)}
+                      className={`w-full text-left p-3 rounded-xl border flex items-center justify-between text-xs transition ${
+                        isAdded
+                          ? 'bg-purple-500/10 border-purple-500/30 text-purple-300'
+                          : 'bg-slate-800/50 border-slate-700/50 text-slate-300 hover:bg-slate-800'
+                      }`}
+                    >
+                      <span className="font-medium truncate">{pl.name}</span>
+                      <span className={`text-[11px] font-semibold ${isAdded ? 'text-purple-400' : 'text-slate-500'}`}>
+                        {isAdded ? '✓ Tersimpan' : '+ Tambah'}
+                      </span>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+
+            <button
+              onClick={() => {
+                handleCreatePlaylist();
+              }}
+              className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-purple-400 border border-purple-500/20 transition"
+            >
+              ➕ Buat Playlist Baru
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Mini-Player Footer */}
       <footer className="fixed bottom-0 left-0 right-0 bg-slate-900/95 backdrop-blur-2xl border-t border-slate-800/80 px-4 md:px-8 py-2.5 z-30 flex flex-col gap-2">
         {/* Seekbar Slider Mini */}
         <div className="w-full flex items-center gap-2 max-w-4xl mx-auto text-[10px] text-slate-400 font-mono">
@@ -501,7 +732,7 @@ export default function Home() {
         </div>
 
         <div className="flex items-center justify-between gap-3 max-w-4xl mx-auto w-full">
-          {/* Informational Judul Lagu (Klik untuk Expand Fullscreen) */}
+          {/* Informational Judul Lagu */}
           <div
             onClick={() => setIsPlayerExpanded(true)}
             className="min-w-0 flex-1 max-w-[50%] md:max-w-xs cursor-pointer group"
@@ -565,7 +796,6 @@ export default function Home() {
               {repeatMode === 'one' ? '🔂' : '🔁'}
             </button>
 
-            {/* Tombol Fullscreen Modal */}
             <button
               onClick={() => setIsPlayerExpanded(true)}
               className="text-slate-400 hover:text-white text-xs pl-2 border-l border-slate-800"
@@ -580,7 +810,6 @@ export default function Home() {
       {/* Fullscreen Mobile Player Overlay ala Spotify */}
       {isPlayerExpanded && currentSong && (
         <div className="fixed inset-0 bg-slate-950/98 backdrop-blur-3xl z-50 flex flex-col justify-between p-6 md:p-12 animate-in fade-in slide-in-from-bottom duration-300">
-          {/* Top Bar Minimize */}
           <div className="flex items-center justify-between">
             <button
               onClick={() => setIsPlayerExpanded(false)}
@@ -599,7 +828,6 @@ export default function Home() {
             </button>
           </div>
 
-          {/* Big Artwork Box */}
           <div className="my-auto flex flex-col items-center">
             <div className="w-64 h-64 sm:w-80 sm:h-80 rounded-3xl bg-gradient-to-tr from-emerald-500/20 via-teal-500/10 to-slate-900 border border-emerald-500/20 flex flex-col items-center justify-center shadow-2xl shadow-emerald-500/10 relative overflow-hidden group">
               <div className="w-24 h-24 rounded-2xl bg-emerald-500 text-slate-950 flex items-center justify-center font-black text-4xl shadow-lg">
@@ -608,7 +836,6 @@ export default function Home() {
               <span className="text-xs text-emerald-400/80 font-medium mt-4">Rey Music Player</span>
             </div>
 
-            {/* Title */}
             <div className="text-center mt-8 max-w-sm">
               <h3 className="text-xl sm:text-2xl font-extrabold text-white truncate">
                 {formatSongTitle(currentSong.name)}
@@ -619,9 +846,7 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Controls & Progress */}
           <div className="w-full max-w-md mx-auto flex flex-col gap-6">
-            {/* Seekbar Big */}
             <div className="space-y-2">
               <input
                 type="range"
@@ -637,7 +862,6 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Big Control Buttons */}
             <div className="flex items-center justify-between px-4">
               <button
                 onClick={() => setIsShuffle(!isShuffle)}

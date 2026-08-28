@@ -50,8 +50,16 @@ export default function Home() {
     return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
   };
 
-  // Initial Load (Songs, Liked Songs, Offline Cache)
+  // Initial Load (Songs, Liked Songs, Offline Cache, & Service Worker)
   useEffect(() => {
+    // Registrasi Native Service Worker untuk Offline App Shell
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker
+        .register('/sw.js')
+        .then((reg) => console.log('Service Worker terpasang:', reg.scope))
+        .catch((err) => console.error('Gagal memasang Service Worker:', err));
+    }
+
     const loadSongs = async () => {
       try {
         const res = await fetch('/api/songs');

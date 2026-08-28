@@ -45,12 +45,10 @@ export default function Home() {
         if (Array.isArray(data) && data.length > 0) {
           setSongs(data);
           setCurrentSong(data[0]);
-          // Simpan ke LocalStorage sebagai cadangan saat offline
           localStorage.setItem('rey_music_cached_songs', JSON.stringify(data));
         }
       } catch (err) {
         console.warn('Gagal koneksi server, mencoba memuat lagu tersimpan...', err);
-        // Jika offline, ambil daftar lagu dari memori lokal HP
         const savedSongs = localStorage.getItem('rey_music_cached_songs');
         if (savedSongs) {
           const parsed = JSON.parse(savedSongs);
@@ -64,7 +62,6 @@ export default function Home() {
 
     loadSongs();
 
-    // Cek audio yang tersimpan di Cache API
     if ('caches' in window) {
       caches.open('rey-music-audio-v1').then(async (cache) => {
         const keys = await cache.keys();
@@ -76,38 +73,39 @@ export default function Home() {
     }
   }, []);
 
-  // 2. Pasang Sumber Audio (Offline/Online)
+  // 2. Pasang Sumber Audio (Aman dari null TypeScript)
   useEffect(() => {
-    if (currentSong && audioRef.current) {
-      const setupAudioSource = async () => {
-        const streamUrl = `/api/stream/${currentSong.id}`;
+    if (!currentSong || !audioRef.current) return;
+    const audio = audioRef.current;
 
-        if ('caches' in window) {
-          const cache = await caches.open('rey-music-audio-v1');
-          const matchedResponse = await cache.match(streamUrl);
+    const setupAudioSource = async () => {
+      const streamUrl = `/api/stream/${currentSong.id}`;
 
-          if (matchedResponse) {
-            const blob = await matchedResponse.blob();
-            audioRef.current!.src = URL.createObjectURL(blob);
-          } else {
-            audioRef.current!.src = streamUrl;
-          }
+      if ('caches' in window) {
+        const cache = await caches.open('rey-music-audio-v1');
+        const matchedResponse = await cache.match(streamUrl);
+
+        if (matchedResponse) {
+          const blob = await matchedResponse.blob();
+          audio.src = URL.createObjectURL(blob);
         } else {
-          audioRef.current.src = streamUrl;
+          audio.src = streamUrl;
         }
+      } else {
+        audio.src = streamUrl;
+      }
 
-        if (isPlaying) {
-          audioRef.current.play().catch((err) => {
-            if (err.name !== 'AbortError') console.error('Playback error:', err);
-          });
-        }
-      };
+      if (isPlaying) {
+        audio.play().catch((err) => {
+          if (err.name !== 'AbortError') console.error('Playback error:', err);
+        });
+      }
+    };
 
-      setupAudioSource();
-    }
+    setupAudioSource();
   }, [currentSong]);
 
-  // 3. Logika Next & Prev (Mendukung Shuffle & Repeat)
+  // 3. Logika Next & Prev
   const handleNextSong = () => {
     if (!currentSong || songs.length === 0) return;
 
@@ -135,7 +133,6 @@ export default function Home() {
   const handlePrevSong = () => {
     if (!currentSong || songs.length === 0) return;
 
-    // Jika lagu sudah berjalan lebih dari 3 detik, restart lagu dulu
     if (audioRef.current && audioRef.current.currentTime > 3) {
       audioRef.current.currentTime = 0;
       return;
@@ -307,7 +304,6 @@ export default function Home() {
                   </div>
 
                   <div className="flex items-center gap-2 shrink-0">
-                    {/* Tombol Simpan Offline */}
                     <button
                       onClick={(e) => handleDownloadOffline(e, song)}
                       disabled={isDownloaded || isDownloading}
@@ -331,7 +327,6 @@ export default function Home() {
 
       {/* Footer Player Control ala Spotify */}
       <footer className="fixed bottom-0 left-0 right-0 bg-slate-900/95 backdrop-blur-xl border-t border-slate-800/80 px-4 md:px-8 py-3 z-30 flex flex-col gap-2">
-        {/* Seekbar / Slider Durasi */}
         <div className="w-full flex items-center gap-3 max-w-4xl mx-auto text-xs text-slate-400 font-mono">
           <span>{formatTime(currentTime)}</span>
           <input
@@ -346,7 +341,6 @@ export default function Home() {
         </div>
 
         <div className="flex items-center justify-between gap-4 max-w-4xl mx-auto w-full">
-          {/* Informational Judul Lagu */}
           <div className="min-w-0 flex-1 max-w-[40%] md:max-w-xs">
             {currentSong && (
               <div className="min-w-0">
@@ -360,9 +354,7 @@ export default function Home() {
             )}
           </div>
 
-          {/* Tombol-Tombol Play, Shuffle, Repeat */}
           <div className="flex items-center gap-3 md:gap-5 shrink-0">
-            {/* Tombol Shuffle */}
             <button
               onClick={() => setIsShuffle(!isShuffle)}
               className={`text-lg transition ${isShuffle ? 'text-emerald-400 font-bold' : 'text-slate-500 hover:text-slate-300'}`}
@@ -371,7 +363,6 @@ export default function Home() {
               🔀
             </button>
 
-            {/* Tombol Prev */}
             <button
               onClick={handlePrevSong}
               disabled={!currentSong}
@@ -380,7 +371,6 @@ export default function Home() {
               ⏮
             </button>
 
-            {/* Tombol Play/Pause */}
             <button
               onClick={togglePlay}
               disabled={!currentSong}
@@ -389,7 +379,6 @@ export default function Home() {
               {isPlaying ? '❚❚' : '▶'}
             </button>
 
-            {/* Tombol Next */}
             <button
               onClick={handleNextSong}
               disabled={!currentSong}
@@ -398,7 +387,6 @@ export default function Home() {
               ⏭
             </button>
 
-            {/* Tombol Repeat */}
             <button
               onClick={toggleRepeat}
               className={`text-lg transition ${repeatMode !== 'off' ? 'text-emerald-400 font-bold' : 'text-slate-500 hover:text-slate-300'}`}

@@ -60,6 +60,54 @@ export async function GET() {
       id: '1uIKBUi8ujWkuMY5gypUgEaG2Ycag1LP_',
       name: 'LUIS FONSI - Despacito (Slowed).opus',
     },
+    {
+      id: '14FuF64YtKIK1iom5vIEIvaabniWqof8O',
+      name: 'KAHITNA - Soulmate.opus',
+    },
+    {
+      id: '1lpyNbRayydV8j9R1va-vurIFijOjxREl',
+      name: 'KAHITNA - Titik Nadir (feat. Monita Tahalea).opus',
+    },
+    {
+      id: '1vp76UZDYZgp5E_Y8Xnjxcytv9UgWzR6F',
+      name: 'KAHITNA - Mantan Terindah.opus',
+    },
+    {
+      id: '1M36uXtvwfIaxsET-9xA60IkzbkC54Zrn',
+      name: 'KAHITNA - Cinta Sudah Lewat.opus',
+    },
+    {
+      id: '13f_oUAXCsYuFqU5FiwFsV5WcyaOLTX0Y',
+      name: 'KAHITNA - Cantik.opus',
+    },
+    {
+      id: '1xzvv6dT_zjUtD8gbW0AkzaeabU4ESTBx',
+      name: 'KAHITNA - Engga Ngerti.opus',
+    },
+    {
+      id: '1aaTpKFyHSqleK2X3Dp6eGH6IS3pFi6O0',
+      name: 'KAHITNA - Cinta Sendiri.opus',
+    },
+    {
+      id: '10i0YN3Dpxmquwa0ne7HXLSh0dVRX-Pta',
+      name: 'KAHITNA - Cerita Cinta.opus',
+    },
+    {
+      id: '1RbT0XRKPch2G0ZLZUiAHIbBHwJCxWBbU',
+      name: 'KAHITNA - Rahasia Cintaku.opus',
+    },
+    {
+      id: '1d7MQ-tYh3k2FbaIvxKGZHA-saueIqw4d',
+      name: 'KAHITNA - Andai Dia Tahu.opus',
+    },
+    {
+      id: '18L_ClbtqB6f_6Lo0wdQ7q4RX-vBnl1Oy',
+      name: 'KAHITNA - Aku, Dirimu, Dirinya.opus',
+    },
+    {
+      id: '1WhXrrKlhp1YeXXhuIkzDm25b37cO883Q',
+      name: 'ENAU & ARI LESMANA - Sesi Potret.opus',
+    },
   ];
 
   return NextResponse.json(songs);

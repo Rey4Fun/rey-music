@@ -12,13 +12,18 @@ export default function Home() {
   const [currentSong, setCurrentSong] = useState<Song | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [loading, setLoading] = useState(true);
+  
+  // State untuk melacak lagu yang sudah diunduh offline
+  const [offlineSongs, setOfflineSongs] = useState<string[]>([]);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Fungsi pembersih ekstensi file (.opus, .mp3) agar judul di layar rapi
   const formatSongTitle = (filename: string) => {
     return filename.replace(/\.(opus|mp3|m4a|wav|flac)$/i, '');
   };
 
+  // 1. Fetch daftar lagu & cek lagu apa saja yang sudah tersimpan di Cache HP
   useEffect(() => {
     fetch('/api/songs')
       .then((res) => res.json())
@@ -35,23 +40,74 @@ export default function Home() {
         console.error('Error fetching songs:', err);
         setLoading(false);
       });
+
+    // Cek isi Cache Storage HP saat aplikasi dibuka
+    if ('caches' in window) {
+      caches.open('rey-music-audio-v1').then(async (cache) => {
+        const keys = await cache.keys();
+        const cachedIds = keys
+          .map((req) => req.url.split('/api/stream/')[1])
+          .filter(Boolean);
+        setOfflineSongs(cachedIds);
+      });
+    }
   }, []);
 
+  // 2. Putar lagu dari Cache HP jika ada (Offline Mode) atau dari Server Vercel (Online Mode)
   useEffect(() => {
     if (currentSong && audioRef.current) {
-      audioRef.current.src = `/api/stream/${currentSong.id}`;
-      if (isPlaying) {
-        const playPromise = audioRef.current.play();
-        if (playPromise !== undefined) {
-          playPromise.catch((error) => {
-            if (error.name !== 'AbortError') {
-              console.error('Playback error:', error);
-            }
-          });
+      const setupAudioSource = async () => {
+        const streamUrl = `/api/stream/${currentSong.id}`;
+        
+        if ('caches' in window) {
+          const cache = await caches.open('rey-music-audio-v1');
+          const matchedResponse = await cache.match(streamUrl);
+          
+          if (matchedResponse) {
+            // Ambil dari Cache HP (Offline)
+            const blob = await matchedResponse.blob();
+            audioRef.current!.src = URL.createObjectURL(blob);
+          } else {
+            // Ambil langsung dari Server (Online)
+            audioRef.current!.src = streamUrl;
+          }
+        } else {
+          audioRef.current.src = streamUrl;
         }
-      }
+
+        if (isPlaying) {
+          const playPromise = audioRef.current.play();
+          if (playPromise !== undefined) {
+            playPromise.catch((error) => {
+              if (error.name !== 'AbortError') console.error('Playback error:', error);
+            });
+          }
+        }
+      };
+
+      setupAudioSource();
     }
   }, [currentSong]);
+
+  // 3. Fungsi untuk mengunduh lagu ke Cache HP
+  const handleDownloadOffline = async (e: React.MouseEvent, song: Song) => {
+    e.stopPropagation(); // Biar tidak memicu play lagu saat tombol download diklik
+    if (!('caches' in window)) return;
+
+    setDownloadingId(song.id);
+    try {
+      const cache = await caches.open('rey-music-audio-v1');
+      const response = await fetch(`/api/stream/${song.id}`);
+      if (response.ok) {
+        await cache.put(`/api/stream/${song.id}`, response);
+        setOfflineSongs((prev) => [...prev, song.id]);
+      }
+    } catch (err) {
+      console.error("Gagal menyimpan lagu offline:", err);
+    } finally {
+      setDownloadingId(null);
+    }
+  };
 
   const handleNextSong = () => {
     if (!currentSong || songs.length === 0) return;
@@ -69,7 +125,6 @@ export default function Home() {
     setIsPlaying(true);
   };
 
-  // --- SINKRONISASI LOCKSCREEN ANDROID ---
   useEffect(() => {
     if ('mediaSession' in navigator && currentSong) {
       const cleanTitle = formatSongTitle(currentSong.name);
@@ -100,9 +155,7 @@ export default function Home() {
       const playPromise = audioRef.current.play();
       if (playPromise !== undefined) {
         playPromise.catch((error) => {
-          if (error.name !== 'AbortError') {
-            console.error('Playback error:', error);
-          }
+          if (error.name !== 'AbortError') console.error('Playback error:', error);
         });
       }
     }
@@ -144,7 +197,7 @@ export default function Home() {
         )}
       </aside>
 
-      {/* Main Content (Daftar Lagu Responsif) */}
+      {/* Main Content */}
       <main className="flex-1 p-4 md:p-8 pb-28 min-w-0">
         <h2 className="text-lg md:text-xl font-bold mb-4 md:mb-6">Koleksi Lagu Saya</h2>
 
@@ -157,6 +210,9 @@ export default function Home() {
             {songs.map((song, index) => {
               const isSelected = currentSong?.id === song.id;
               const cleanTitle = formatSongTitle(song.name);
+              const isDownloaded = offlineSongs.includes(song.id);
+              const isDownloading = downloadingId === song.id;
+
               return (
                 <div
                   key={song.id}
@@ -171,11 +227,31 @@ export default function Home() {
                     <span className="text-sm text-slate-500 w-5 shrink-0 text-right">{index + 1}</span>
                     <span className="font-medium text-sm truncate">{cleanTitle}</span>
                   </div>
-                  {isSelected && isPlaying && (
-                    <span className="text-xs text-emerald-400 font-semibold shrink-0 bg-emerald-500/10 px-2.5 py-1 rounded-full">
-                      Playing
-                    </span>
-                  )}
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    {/* Status Play */}
+                    {isSelected && isPlaying && (
+                      <span className="text-xs text-emerald-400 font-semibold bg-emerald-500/10 px-2.5 py-1 rounded-full">
+                        Playing
+                      </span>
+                    )}
+
+                    {/* Tombol Simpan Offline */}
+                    <button
+                      onClick={(e) => handleDownloadOffline(e, song)}
+                      disabled={isDownloaded || isDownloading}
+                      title={isDownloaded ? "Tersimpan Offline" : "Unduh untuk Offline"}
+                      className={`p-2 rounded-lg text-xs font-medium transition ${
+                        isDownloaded
+                          ? 'text-emerald-400 bg-emerald-500/10 cursor-default'
+                          : isDownloading
+                          ? 'text-amber-400 bg-amber-500/10 animate-pulse'
+                          : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                      }`}
+                    >
+                      {isDownloaded ? '✓ Offline' : isDownloading ? '⏳...' : '⬇️ Simpan'}
+                    </button>
+                  </div>
                 </div>
               );
             })}
@@ -183,7 +259,7 @@ export default function Home() {
         )}
       </main>
 
-      {/* Footer Controls Responsif */}
+      {/* Footer Controls */}
       <footer className="fixed bottom-0 left-0 right-0 h-20 bg-slate-900/95 backdrop-blur-md border-t border-slate-800 px-4 md:px-8 flex items-center justify-between gap-3 z-30">
         <div className="min-w-0 flex-1 max-w-[55%] md:max-w-xs">
           {currentSong && (
@@ -191,12 +267,13 @@ export default function Home() {
               <p className="text-sm font-semibold text-white truncate">
                 {formatSongTitle(currentSong.name)}
               </p>
-              <p className="text-xs text-slate-400 truncate">Google Drive</p>
+              <p className="text-xs text-slate-400 truncate">
+                {offlineSongs.includes(currentSong.id) ? '⚡ Diputar Offline' : '☁️ Streaming Online'}
+              </p>
             </div>
           )}
         </div>
 
-        {/* Player Controls */}
         <div className="flex items-center gap-2 md:gap-4 shrink-0">
           <button
             onClick={handlePrevSong}

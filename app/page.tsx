@@ -119,6 +119,7 @@ export default function Home() {
       const defaultPlaylists: Playlist[] = [
         { id: '1', name: 'Lagu Enak 🎧', songIds: [] },
         { id: '2', name: 'Santai / Chill ☕', songIds: [] },
+        { id: '3', name: 'Kahitna🥀', songIds: [] },
       ];
       setPlaylists(defaultPlaylists);
       localStorage.setItem('rey_music_playlists', JSON.stringify(defaultPlaylists));

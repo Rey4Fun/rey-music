@@ -73,7 +73,8 @@ export default function Home() {
 
     const loadSongs = async () => {
       try {
-        const res = await fetch('/api/songs');
+        // Dipaksa ambil data paling baru dari server tanpa menyimpan cache API lama
+        const res = await fetch(`/api/songs?t=${Date.now()}`, { cache: 'no-store' });
         const data = await res.json();
         if (Array.isArray(data) && data.length > 0) {
           setSongs(data);

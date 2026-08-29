@@ -108,6 +108,54 @@ export async function GET() {
       id: '1WhXrrKlhp1YeXXhuIkzDm25b37cO883Q',
       name: 'ENAU & ARI LESMANA - Sesi Potret.opus',
     },
+    {
+      id: '1EJvKCXMck0ZxvVy4Y3kxkWugWOPXzeHv',
+      name: 'KAHITNA - Takkan Terganti.opus',
+    },
+    {
+      id: '1YwRS2wyc_89Xrz8xEOPr0zActUqLGaY7',
+      name: 'KAHITNA - Setahun Kemarin.opus',
+    },
+    {
+      id: '1YYLDLgD0x8OeCL4OW75c5m8cCi4ZciSj',
+      name: 'DEWA 19 - Kangen.opus',
+    },
+    {
+      id: '14lB_l9aD50J8GJj4-fxvtddoIk_xfVgq',
+      name: 'DEWA 19 - Roman Picisan.opus',
+    },
+    {
+      id: '1sCba8B5gaFywI6j0bW3uI1grEGsuMjzZ',
+      name: 'DEWA 19 - Dewi.opus',
+    },
+    {
+      id: '1_pv-CpFyJ7V-1dNGHn7tGtBMrGbrSaZf',
+      name: 'DEWA 19 - Separuh Nafas.opus',
+    },
+    {
+      id: '1QXa01ebVdJz5bEfuQ3ip98RES7i137S7',
+      name: 'DEWA 19 - Sedang Ingin Bercinta.opus',
+    },
+    {
+      id: '1dBOHyhcZboLY0Zwu-s6AMHkzdVDNLJwp',
+      name: 'DEWA 19 - Laskar Cinta.opus',
+    },
+    {
+      id: '1zbtXnwRfZlWXhymSEUJqioeS5ccpZjvt',
+      name: 'DEWA 19 - Selimut Hati.opus',
+    },
+    {
+      id: '1XDWrrfpRhDUv8ZB3NbCkZ_L0bMRayD83',
+      name: 'DEWA 19 - Larut.opus',
+    },
+    {
+      id: '1TjPRmk5KYz_4ae7WlyHEcmImWuu313De',
+      name: 'DEWA 19 - Live On.opus',
+    },
+    {
+      id: '15-p_IF3M9hSePR2EjRXkshig-MVA-2JD',
+      name: 'DEWA 19 - Bukan Cinta Manusia Biasa.opus',
+    },
   ];
 
   return NextResponse.json(songs);
